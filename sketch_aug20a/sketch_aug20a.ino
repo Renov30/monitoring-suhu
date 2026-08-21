@@ -1,6 +1,7 @@
 #include <ETH.h>
 #include <WebServer.h>
 #include <DHT.h>
+#include <HTTPClient.h>
 
 // =====================================================
 // KONFIGURASI DHT11
@@ -24,6 +25,15 @@ IPAddress subnet(255, 255, 255, 0);
 
 IPAddress primaryDNS(192, 168, 2, 254);
 IPAddress secondaryDNS(8, 8, 8, 8);
+
+
+// =====================================================
+// KONFIGURASI SERVER DATABASE (API)
+// =====================================================
+// GANTI SESUAI IP PC SERVER (XAMPP)
+// =====================================================
+
+const char* apiHost = "http://192.168.2.10/api-monitoring-ruangan";
 
 
 // =====================================================
@@ -67,6 +77,15 @@ bool eth_connected = false;
 unsigned long lastSensorRead = 0;
 
 const unsigned long sensorInterval = 2000;
+
+
+// =====================================================
+// WAKTU PENGIRIMAN KE DATABASE
+// =====================================================
+
+unsigned long lastDbSend = 0;
+
+const unsigned long dbSendInterval = 60000;
 
 
 // =====================================================
@@ -136,6 +155,72 @@ void onEvent(arduino_event_id_t event) {
 
       break;
   }
+}
+
+
+// =====================================================
+// KIRIM DATA KE DATABASE SERVER
+// =====================================================
+
+void sendToDatabase() {
+
+  if (!eth_connected) {
+
+    Serial.println("[DB] SKIP: Ethernet tidak terhubung");
+
+    return;
+  }
+
+
+  if (isnan(temperature) || isnan(humidity)) {
+
+    Serial.println("[DB] SKIP: Belum ada data sensor valid");
+
+    return;
+  }
+
+
+  HTTPClient http;
+
+  http.begin(String(apiHost) + "/api.php");
+
+  http.addHeader("Content-Type", "application/json");
+
+  http.setTimeout(5000);
+
+
+  String payload = "{";
+
+  payload += "\"temperature\":";
+
+  payload += String(temperature, 1);
+
+  payload += ",\"humidity\":";
+
+  payload += String(humidity, 1);
+
+  payload += "}";
+
+
+  int httpCode = http.POST(payload);
+
+
+  if (httpCode > 0) {
+
+    Serial.print("[DB] Terkirim, response: ");
+
+    Serial.println(httpCode);
+
+  } else {
+
+    Serial.print("[DB] ERROR: ");
+
+    Serial.println(http.errorToString(httpCode));
+
+  }
+
+
+  http.end();
 }
 
 
@@ -259,6 +344,50 @@ void handleRoot() {
   html += "}";
 
 
+  html += ".panel {";
+  html += "background: white;";
+  html += "padding: 25px;";
+  html += "border-radius: 15px;";
+  html += "margin-top: 20px;";
+  html += "box-shadow: 0 4px 12px rgba(0,0,0,0.1);";
+  html += "text-align: left;";
+  html += "}";
+
+
+  html += ".panel h2 {";
+  html += "color: #555;";
+  html += "text-align: center;";
+  html += "font-size: 20px;";
+  html += "margin-top: 0;";
+  html += "}";
+
+
+  html += ".chart-wrap {";
+  html += "position: relative;";
+  html += "height: 300px;";
+  html += "}";
+
+
+  html += "table {";
+  html += "width: 100%;";
+  html += "border-collapse: collapse;";
+  html += "font-size: 14px;";
+  html += "}";
+
+
+  html += "th, td {";
+  html += "padding: 8px 10px;";
+  html += "border-bottom: 1px solid #eee;";
+  html += "text-align: center;";
+  html += "}";
+
+
+  html += "th {";
+  html += "background: #f7f7f7;";
+  html += "color: #555;";
+  html += "}";
+
+
   html += "</style>";
 
   html += "</head>";
@@ -371,6 +500,50 @@ void handleRoot() {
 
 
   // =================================================
+  // GRAFIK RIWAYAT
+  // =================================================
+
+  html += "<div class='panel'>";
+
+  html += "<h2>Grafik Riwayat</h2>";
+
+  html += "<div class='chart-wrap'>";
+
+  html += "<canvas id='chart'></canvas>";
+
+  html += "</div>";
+
+  html += "</div>";
+
+
+  // =================================================
+  // TABEL RIWAYAT
+  // =================================================
+
+  html += "<div class='panel'>";
+
+  html += "<h2>Riwayat Data</h2>";
+
+  html += "<table>";
+
+  html += "<thead>";
+
+  html += "<tr><th>Waktu</th><th>Suhu (°C)</th><th>Kelembapan (%)</th></tr>";
+
+  html += "</thead>";
+
+  html += "<tbody id='history-body'>";
+
+  html += "<tr><td colspan='3'>Memuat...</td></tr>";
+
+  html += "</tbody>";
+
+  html += "</table>";
+
+  html += "</div>";
+
+
+  // =================================================
   // FOOTER
   // =================================================
 
@@ -382,6 +555,106 @@ void handleRoot() {
 
 
   html += "</div>";
+
+
+  // =================================================
+  // JAVASCRIPT (CHART.JS + RIWAYAT)
+  // =================================================
+
+  html += "<script src='" + String(apiHost) + "/chart.umd.min.js'></script>";
+
+  html += "<script>";
+
+  html += "var chart = null;";
+
+  html += "if (typeof Chart !== 'undefined') {";
+
+  html += "chart = new Chart(document.getElementById('chart'), {";
+
+  html += "type: 'line',";
+
+  html += "data: { labels: [], datasets: [";
+
+  html += "{ label: 'Suhu (°C)', data: [], borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,0.08)', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y' },";
+
+  html += "{ label: 'Kelembapan (%)', data: [], borderColor: '#3498db', backgroundColor: 'rgba(52,152,219,0.08)', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y1' }";
+
+  html += "] },";
+
+  html += "options: {";
+
+  html += "responsive: true,";
+
+  html += "maintainAspectRatio: false,";
+
+  html += "interaction: { mode: 'index', intersect: false },";
+
+  html += "scales: {";
+
+  html += "x: { ticks: { maxTicksLimit: 10 } },";
+
+  html += "y: { position: 'left', title: { display: true, text: '°C' } },";
+
+  html += "y1: { position: 'right', min: 0, max: 100, title: { display: true, text: '%' }, grid: { drawOnChartArea: false } }";
+
+  html += "}";
+
+  html += "}";
+
+  html += "});";
+
+  html += "}";
+
+
+  html += "function loadHistory() {";
+
+  html += "fetch('" + String(apiHost) + "/api.php?action=history&limit=50')";
+
+  html += ".then(function(r) { return r.json(); })";
+
+  html += ".then(function(json) {";
+
+  html += "if (!json.ok) { return; }";
+
+  html += "var rows = json.data;";
+
+  html += "var asc = rows.slice().reverse();";
+
+  html += "if (chart) {";
+
+  html += "chart.data.labels = asc.map(function(d) { return d.recorded_at.substring(11, 16); });";
+
+  html += "chart.data.datasets[0].data = asc.map(function(d) { return parseFloat(d.temperature); });";
+
+  html += "chart.data.datasets[1].data = asc.map(function(d) { return parseFloat(d.humidity); });";
+
+  html += "chart.update('none');";
+
+  html += "}";
+
+  html += "var body = document.getElementById('history-body');";
+
+  html += "if (rows.length === 0) { body.innerHTML = '<tr><td colspan=\"3\">Belum ada data</td></tr>'; return; }";
+
+  html += "body.innerHTML = rows.map(function(d) {";
+
+  html += "return '<tr><td>' + d.recorded_at + '</td><td>' + parseFloat(d.temperature).toFixed(1) + '</td><td>' + parseFloat(d.humidity).toFixed(1) + '</td></tr>';";
+
+  html += "}).join('');";
+
+  html += "})";
+
+  html += ".catch(function() {";
+
+  html += "document.getElementById('history-body').innerHTML = '<tr><td colspan=\"3\">Server database tidak dapat dihubungi</td></tr>';";
+
+  html += "});";
+
+  html += "}";
+
+  html += "loadHistory();";
+
+  html += "</script>";
 
   html += "</body>";
 
@@ -575,6 +848,19 @@ void loop() {
       Serial.println("--------------------------------------");
 
     }
+
+  }
+
+
+  // =================================================
+  // KIRIM DATA KE DATABASE SETIAP 1 MENIT
+  // =================================================
+
+  if (millis() - lastDbSend >= dbSendInterval) {
+
+    lastDbSend = millis();
+
+    sendToDatabase();
 
   }
 
