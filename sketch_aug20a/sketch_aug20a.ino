@@ -3,6 +3,8 @@
 #include <DHT.h>
 #include <HTTPClient.h>
 
+#include "credentials.h"
+
 // =====================================================
 // KONFIGURASI DHT11
 // =====================================================
@@ -16,24 +18,23 @@ DHT dht(DHTPIN, DHTTYPE);
 // =====================================================
 // KONFIGURASI STATIC IP
 // =====================================================
-// GANTI SESUAI JARINGAN ANDA
+// Nilai asli ada di credentials.h (tidak ikut di-commit).
+// Salin credentials.h.example untuk membuatnya.
 // =====================================================
 
-IPAddress local_IP(192, 168, 2, 24);
-IPAddress gateway(192, 168, 2, 254);
-IPAddress subnet(255, 255, 255, 0);
+IPAddress local_IP(NET_LOCAL_IP);
+IPAddress gateway(NET_GATEWAY);
+IPAddress subnet(NET_SUBNET);
 
-IPAddress primaryDNS(192, 168, 2, 254);
-IPAddress secondaryDNS(8, 8, 8, 8);
+IPAddress primaryDNS(NET_PRIMARY_DNS);
+IPAddress secondaryDNS(NET_SECONDARY_DNS);
 
 
 // =====================================================
 // KONFIGURASI SERVER DATABASE (API)
 // =====================================================
-// GANTI SESUAI IP PC SERVER (XAMPP)
-// =====================================================
 
-const char* apiHost = "http://192.168.2.10/api-monitoring-ruangan";
+const char* apiHost = API_HOST;
 
 
 // =====================================================
