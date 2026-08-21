@@ -48,17 +48,19 @@ if ($method === 'POST') {
 
     $t = $input['temperature'] ?? null;
     $h = $input['humidity'] ?? null;
+    $d = $input['device'] ?? null;
 
     if (!is_numeric($t) || !is_numeric($h)
         || $t < -40 || $t > 80
-        || $h < 0 || $h > 100) {
+        || $h < 0 || $h > 100
+        || !is_string($d) || strlen($d) < 1 || strlen($d) > 50) {
         respond(400, ['ok' => false, 'error' => 'Data tidak valid']);
     }
 
     $stmt = $pdo->prepare(
-        'INSERT INTO `' . DB_TABLE . '` (temperature, humidity) VALUES (:t, :h)'
+        'INSERT INTO `' . DB_TABLE . '` (device, temperature, humidity) VALUES (:d, :t, :h)'
     );
-    $stmt->execute([':t' => (float)$t, ':h' => (float)$h]);
+    $stmt->execute([':d' => $d, ':t' => (float)$t, ':h' => (float)$h]);
 
     respond(201, ['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
 }
@@ -77,12 +79,25 @@ if ($method === 'GET') {
     if ($limit < 1)   $limit = 50;
     if ($limit > 500) $limit = 500;
 
-    $stmt = $pdo->prepare(
-        'SELECT temperature, humidity, recorded_at
-         FROM `' . DB_TABLE . '`
-         ORDER BY id DESC
-         LIMIT :lim'
-    );
+    $device = $_GET['device'] ?? '';
+
+    if ($device !== '') {
+        $stmt = $pdo->prepare(
+            'SELECT device, temperature, humidity, recorded_at
+             FROM `' . DB_TABLE . '`
+             WHERE device = :dev
+             ORDER BY id DESC
+             LIMIT :lim'
+        );
+        $stmt->bindValue(':dev', $device, PDO::PARAM_STR);
+    } else {
+        $stmt = $pdo->prepare(
+            'SELECT device, temperature, humidity, recorded_at
+             FROM `' . DB_TABLE . '`
+             ORDER BY id DESC
+             LIMIT :lim'
+        );
+    }
     $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
     $stmt->execute();
 

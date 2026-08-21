@@ -14,11 +14,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `monitoring_ruangan`;
 CREATE TABLE `monitoring_ruangan`  (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `device` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL COMMENT 'Identitas perangkat/ruangan',
   `temperature` float NOT NULL COMMENT 'Suhu (°C)',
   `humidity` float NOT NULL COMMENT 'Kelembapan relatif (%)',
   `recorded_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Waktu simpan (jam server)',
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_recorded_at`(`recorded_at` ASC) USING BTREE
+  INDEX `idx_recorded_at`(`recorded_at` ASC) USING BTREE,
+  INDEX `idx_device_recorded`(`device` ASC, `recorded_at` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_uca1400_ai_ci ROW_FORMAT = Dynamic;
 
 SET FOREIGN_KEY_CHECKS = 1;

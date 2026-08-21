@@ -2,6 +2,7 @@
 #include <WebServer.h>
 #include <DHT.h>
 #include <HTTPClient.h>
+#include <time.h>
 
 #include "credentials.h"
 
@@ -35,6 +36,23 @@ IPAddress secondaryDNS(NET_SECONDARY_DNS);
 // =====================================================
 
 const char* apiHost = API_HOST;
+
+
+// =====================================================
+// KONFIGURASI NTP
+// =====================================================
+// Dipakai agar pengiriman ke database tepat di detik 0
+// setiap menit (waktu nyata, bukan sejak perangkat nyala).
+// Butuh koneksi internet melalui jaringan.
+// =====================================================
+
+const char* ntpServer1 = "pool.ntp.org";
+
+const char* ntpServer2 = "time.google.com";
+
+const long gmtOffsetSec = 7 * 3600;  // WIB = UTC+7 (WITA ganti 8, WIT ganti 9)
+
+const int dstOffsetSec = 0;
 
 
 // =====================================================
@@ -90,6 +108,15 @@ const unsigned long dbSendInterval = 60000;
 
 
 // =====================================================
+// STATUS WAKTU & PENGIRIMAN PER MENIT
+// =====================================================
+
+bool timeSynced = false;
+
+int lastSentMinute = -1;
+
+
+// =====================================================
 // EVENT ETHERNET
 // =====================================================
 
@@ -130,6 +157,16 @@ void onEvent(arduino_event_id_t event) {
       Serial.println(ETH.subnetMask());
 
       Serial.println("[WEB] http://" + ETH.localIP().toString());
+
+
+      configTime(
+        gmtOffsetSec,
+        dstOffsetSec,
+        ntpServer1,
+        ntpServer2
+      );
+
+      Serial.println("[NTP] Sinkronisasi waktu dimulai");
 
       break;
 
@@ -192,6 +229,12 @@ void sendToDatabase() {
 
   String payload = "{";
 
+  payload += "\"device\":\"";
+
+  payload += DEVICE_NAME;
+
+  payload += "\",";
+
   payload += "\"temperature\":";
 
   payload += String(temperature, 1);
@@ -226,6 +269,52 @@ void sendToDatabase() {
 
 
 // =====================================================
+// ENDPOINT DATA REALTIME (JSON)
+// =====================================================
+
+void handleData() {
+
+  String json = "{";
+
+  json += "\"temperature\":";
+
+  if (isnan(temperature)) {
+
+    json += "null";
+
+  } else {
+
+    json += String(temperature, 1);
+
+  }
+
+  json += ",\"humidity\":";
+
+  if (isnan(humidity)) {
+
+    json += "null";
+
+  } else {
+
+    json += String(humidity, 1);
+
+  }
+
+  json += ",\"eth_connected\":";
+
+  json += eth_connected ? "true" : "false";
+
+  json += ",\"ip\":\"";
+
+  json += ETH.localIP().toString();
+
+  json += "\"}";
+
+  server.send(200, "application/json", json);
+}
+
+
+// =====================================================
 // HALAMAN WEB
 // =====================================================
 
@@ -241,8 +330,6 @@ void handleRoot() {
   html += "<meta charset='UTF-8'>";
 
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-
-  html += "<meta http-equiv='refresh' content='2'>";
 
   html += "<title>Monitoring Ruangan</title>";
 
@@ -405,14 +492,14 @@ void handleRoot() {
 
   html += "<h1>Monitoring Ruangan</h1>";
 
-  html += "<div class='subtitle'>WT32-ETH01 + DHT11</div>";
+  html += "<div class='subtitle'>" + String(DEVICE_NAME) + " - WT32-ETH01 + DHT11</div>";
 
 
   // =================================================
   // STATUS ETHERNET
   // =================================================
 
-  html += "<div class='status'>";
+  html += "<div class='status' id='status-box'>";
 
   if (eth_connected) {
 
@@ -453,11 +540,11 @@ void handleRoot() {
 
   if (isnan(temperature)) {
 
-    html += "<div class='value'>--</div>";
+    html += "<div class='value' id='temp-value'>--</div>";
 
   } else {
 
-    html += "<div class='value'>";
+    html += "<div class='value' id='temp-value'>";
 
     html += String(temperature, 1);
 
@@ -480,11 +567,11 @@ void handleRoot() {
 
   if (isnan(humidity)) {
 
-    html += "<div class='value'>--</div>";
+    html += "<div class='value' id='hum-value'>--</div>";
 
   } else {
 
-    html += "<div class='value'>";
+    html += "<div class='value' id='hum-value'>";
 
     html += String(humidity, 1);
 
@@ -609,7 +696,7 @@ void handleRoot() {
 
   html += "function loadHistory() {";
 
-  html += "fetch('" + String(apiHost) + "/api.php?action=history&limit=50')";
+  html += "fetch('" + String(apiHost) + "/api.php?action=history&limit=50&device=" + String(DEVICE_NAME) + "')";
 
   html += ".then(function(r) { return r.json(); })";
 
@@ -654,6 +741,43 @@ void handleRoot() {
   html += "}";
 
   html += "loadHistory();";
+
+
+  html += "function updateRealtime() {";
+
+  html += "fetch('/data')";
+
+  html += ".then(function(r) { return r.json(); })";
+
+  html += ".then(function(d) {";
+
+  html += "var st = document.getElementById('status-box');";
+
+  html += "if (d.eth_connected) {";
+
+  html += "st.innerHTML = '<div class=\"status-online\">● Ethernet Connected</div><div>IP: ' + d.ip + '</div>';";
+
+  html += "} else {";
+
+  html += "st.innerHTML = '<div class=\"status-offline\">● Ethernet Disconnected</div>';";
+
+  html += "}";
+
+  html += "document.getElementById('temp-value').innerHTML = d.temperature === null ? '--' : d.temperature.toFixed(1) + ' <span class=\"unit\">°C</span>';";
+
+  html += "document.getElementById('hum-value').innerHTML = d.humidity === null ? '--' : d.humidity.toFixed(1) + ' <span class=\"unit\">%</span>';";
+
+  html += "})";
+
+  html += ".catch(function() {});";
+
+  html += "}";
+
+  html += "setInterval(updateRealtime, 2000);";
+
+  html += "updateRealtime();";
+
+  html += "setInterval(loadHistory, 30000);";
 
   html += "</script>";
 
@@ -774,6 +898,8 @@ void setup() {
 
   server.on("/", handleRoot);
 
+  server.on("/data", handleData);
+
   server.begin();
 
   Serial.println("[WEB] Web Server Started");
@@ -854,14 +980,54 @@ void loop() {
 
 
   // =================================================
-  // KIRIM DATA KE DATABASE SETIAP 1 MENIT
+  // KIRIM DATA KE DATABASE TIAP MENIT (DETIK 0)
   // =================================================
 
-  if (millis() - lastDbSend >= dbSendInterval) {
+  struct tm timeinfo;
 
-    lastDbSend = millis();
+  if (getLocalTime(&timeinfo, 0)) {
 
-    sendToDatabase();
+    // -----------------------------------------------
+    // NTP SINKRON: kirim saat menit berganti
+    // -----------------------------------------------
+
+    if (!timeSynced) {
+
+      timeSynced = true;
+
+      lastSentMinute = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+
+      Serial.println("[NTP] Waktu tersinkronisasi, kirim per menit aktif");
+
+    }
+
+
+    int nowMinute = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+
+    if (nowMinute != lastSentMinute) {
+
+      lastSentMinute = nowMinute;
+
+      sendToDatabase();
+
+    }
+
+  } else {
+
+    // -----------------------------------------------
+    // FALLBACK: NTP BELUM SINKRON
+    // Kirim per 1 menit sejak nyala agar data tetap jalan
+    // -----------------------------------------------
+
+    if (millis() - lastDbSend >= dbSendInterval) {
+
+      lastDbSend = millis();
+
+      Serial.println("[DB] NTP belum sinkron, kirim berbasis uptime");
+
+      sendToDatabase();
+
+    }
 
   }
 
