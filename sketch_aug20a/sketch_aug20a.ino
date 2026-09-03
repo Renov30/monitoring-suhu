@@ -476,6 +476,54 @@ void handleRoot() {
   html += "}";
 
 
+  html += ".hist-nav {";
+  html += "display: flex;";
+  html += "justify-content: center;";
+  html += "align-items: center;";
+  html += "gap: 10px;";
+  html += "margin-bottom: 15px;";
+  html += "flex-wrap: wrap;";
+  html += "}";
+
+
+  html += ".hist-nav button {";
+  html += "border: none;";
+  html += "background: #eef2f7;";
+  html += "color: #333;";
+  html += "padding: 8px 14px;";
+  html += "border-radius: 8px;";
+  html += "font-size: 14px;";
+  html += "font-weight: bold;";
+  html += "cursor: pointer;";
+  html += "}";
+
+
+  html += ".hist-nav button:hover:not(:disabled) {";
+  html += "background: #dbe4ef;";
+  html += "}";
+
+
+  html += ".hist-nav button:disabled {";
+  html += "opacity: 0.4;";
+  html += "cursor: default;";
+  html += "}";
+
+
+  html += "#hist-label {";
+  html += "font-weight: bold;";
+  html += "color: #444;";
+  html += "}";
+
+
+  html += ".hist-nav input[type='date'] {";
+  html += "border: 1px solid #ccc;";
+  html += "padding: 7px 10px;";
+  html += "border-radius: 8px;";
+  html += "font-size: 14px;";
+  html += "color: #333;";
+  html += "}";
+
+
   html += "</style>";
 
   html += "</head>";
@@ -612,6 +660,20 @@ void handleRoot() {
 
   html += "<h2>Riwayat Data</h2>";
 
+  html += "<div class='hist-nav'>";
+
+  html += "<button onclick='prevDay()'>&#10094;</button>";
+
+  html += "<input type='date' id='hist-date' onchange='onDatePick()'>";
+
+  html += "<button onclick='nextDay()'>&#10095;</button>";
+
+  html += "<span id='hist-label'>Memuat...</span>";
+
+  html += "<button id='btn-today' onclick='goToday()'>Hari Ini</button>";
+
+  html += "</div>";
+
   html += "<table>";
 
   html += "<thead>";
@@ -694,27 +756,49 @@ void handleRoot() {
   html += "}";
 
 
-  html += "function loadHistory() {";
+  html += "var selectedDate = todayStr();";
 
-  html += "fetch('" + String(apiHost) + "/api.php?action=history&limit=50&device=" + String(DEVICE_NAME) + "')";
+  html += "";
 
-  html += ".then(function(r) { return r.json(); })";
+  html += "function pad(n) { return n < 10 ? '0' + n : '' + n; }";
 
-  html += ".then(function(json) {";
+  html += "function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }";
 
-  html += "if (!json.ok) { return; }";
+  html += "function dateLabel(ds) {";
 
-  html += "var rows = json.data;";
+  html += "var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];";
 
-  html += "var asc = rows.slice().reverse();";
+  html += "var months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];";
+
+  html += "var p = ds.split('-'); var d = new Date(p[0], p[1] - 1, p[2]);";
+
+  html += "return days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();";
+
+  html += "}";
+
+  html += "";
+
+  html += "function updateNav() {";
+
+  html += "document.getElementById('hist-date').value = selectedDate;";
+
+  html += "document.getElementById('hist-label').textContent = dateLabel(selectedDate);";
+
+  html += "document.getElementById('btn-today').disabled = (selectedDate === todayStr());";
+
+  html += "}";
+
+  html += "";
+
+  html += "function renderRows(rows) {";
 
   html += "if (chart) {";
 
-  html += "chart.data.labels = asc.map(function(d) { return d.recorded_at.substring(11, 16); });";
+  html += "chart.data.labels = rows.map(function(d) { return d.recorded_at.substring(11, 16); });";
 
-  html += "chart.data.datasets[0].data = asc.map(function(d) { return parseFloat(d.temperature); });";
+  html += "chart.data.datasets[0].data = rows.map(function(d) { return parseFloat(d.temperature); });";
 
-  html += "chart.data.datasets[1].data = asc.map(function(d) { return parseFloat(d.humidity); });";
+  html += "chart.data.datasets[1].data = rows.map(function(d) { return parseFloat(d.humidity); });";
 
   html += "chart.update('none');";
 
@@ -722,13 +806,31 @@ void handleRoot() {
 
   html += "var body = document.getElementById('history-body');";
 
-  html += "if (rows.length === 0) { body.innerHTML = '<tr><td colspan=\"3\">Belum ada data</td></tr>'; return; }";
+  html += "if (rows.length === 0) { body.innerHTML = '<tr><td colspan=\"3\">Belum ada data pada tanggal ini</td></tr>'; return; }";
 
   html += "body.innerHTML = rows.map(function(d) {";
 
-  html += "return '<tr><td>' + d.recorded_at + '</td><td>' + parseFloat(d.temperature).toFixed(1) + '</td><td>' + parseFloat(d.humidity).toFixed(1) + '</td></tr>';";
+  html += "return '<tr><td>' + d.recorded_at.substring(11) + '</td><td>' + parseFloat(d.temperature).toFixed(1) + '</td><td>' + parseFloat(d.humidity).toFixed(1) + '</td></tr>';";
 
   html += "}).join('');";
+
+  html += "}";
+
+  html += "";
+
+  html += "function loadHistory() {";
+
+  html += "updateNav();";
+
+  html += "fetch('" + String(apiHost) + "/api.php?action=history&device=" + String(DEVICE_NAME) + "&date=' + selectedDate)";
+
+  html += ".then(function(r) { return r.json(); })";
+
+  html += ".then(function(json) {";
+
+  html += "if (!json.ok) { return; }";
+
+  html += "renderRows(json.data);";
 
   html += "})";
 
@@ -739,6 +841,60 @@ void handleRoot() {
   html += "});";
 
   html += "}";
+
+  html += "";
+
+  html += "function prevDay() {";
+
+  html += "var d = new Date(selectedDate + 'T00:00:00');";
+
+  html += "d.setDate(d.getDate() - 1);";
+
+  html += "selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());";
+
+  html += "loadHistory();";
+
+  html += "}";
+
+  html += "";
+
+  html += "function nextDay() {";
+
+  html += "var d = new Date(selectedDate + 'T00:00:00');";
+
+  html += "d.setDate(d.getDate() + 1);";
+
+  html += "selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());";
+
+  html += "loadHistory();";
+
+  html += "}";
+
+  html += "";
+
+  html += "function goToday() {";
+
+  html += "selectedDate = todayStr();";
+
+  html += "loadHistory();";
+
+  html += "}";
+
+  html += "";
+
+  html += "function onDatePick() {";
+
+  html += "var v = document.getElementById('hist-date').value;";
+
+  html += "if (v) { selectedDate = v; loadHistory(); }";
+
+  html += "}";
+
+  html += "";
+
+  html += "setInterval(function() { if (selectedDate === todayStr()) loadHistory(); }, 30000);";
+
+  html += "";
 
   html += "loadHistory();";
 
@@ -776,8 +932,6 @@ void handleRoot() {
   html += "setInterval(updateRealtime, 2000);";
 
   html += "updateRealtime();";
-
-  html += "setInterval(loadHistory, 30000);";
 
   html += "</script>";
 

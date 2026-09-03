@@ -75,31 +75,70 @@ if ($method === 'GET') {
         respond(400, ['ok' => false, 'error' => 'Action tidak dikenal']);
     }
 
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
-    if ($limit < 1)   $limit = 50;
-    if ($limit > 500) $limit = 500;
+    $device = trim($_GET['device'] ?? '');
 
-    $device = $_GET['device'] ?? '';
+    $date = $_GET['date'] ?? '';
 
-    if ($device !== '') {
-        $stmt = $pdo->prepare(
-            'SELECT device, temperature, humidity, recorded_at
-             FROM `' . DB_TABLE . '`
-             WHERE device = :dev
-             ORDER BY id DESC
-             LIMIT :lim'
-        );
-        $stmt->bindValue(':dev', $device, PDO::PARAM_STR);
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1) {
+
+        // -------------------------------------------------
+        // MODE PER TANGGAL: ambil semua data 1 hari penuh
+        // -------------------------------------------------
+
+        $endTs = strtotime($date . ' +1 day');
+
+        if ($endTs === false) {
+            respond(400, ['ok' => false, 'error' => 'Tanggal tidak valid']);
+        }
+
+        $end = date('Y-m-d', $endTs);
+
+        $sql = 'SELECT device, temperature, humidity, recorded_at
+                FROM `' . DB_TABLE . '`
+                WHERE recorded_at >= :start AND recorded_at < :end';
+
+        $bind = [':start' => $date . ' 00:00:00', ':end' => $end . ' 00:00:00'];
+
+        if ($device !== '') {
+            $sql .= ' AND device = :dev';
+            $bind[':dev'] = $device;
+        }
+
+        $sql .= ' ORDER BY recorded_at ASC';
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($bind);
+
     } else {
-        $stmt = $pdo->prepare(
-            'SELECT device, temperature, humidity, recorded_at
-             FROM `' . DB_TABLE . '`
-             ORDER BY id DESC
-             LIMIT :lim'
-        );
+
+        // -------------------------------------------------
+        // MODE LAMA: N data terakhir
+        // -------------------------------------------------
+
+        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 50;
+        if ($limit < 1)   $limit = 50;
+        if ($limit > 500) $limit = 500;
+
+        $sql = 'SELECT device, temperature, humidity, recorded_at
+                FROM `' . DB_TABLE . '`';
+
+        $bind = [];
+
+        if ($device !== '') {
+            $sql .= ' WHERE device = :dev';
+            $bind[':dev'] = $device;
+        }
+
+        $sql .= ' ORDER BY id DESC LIMIT :lim';
+
+        $stmt = $pdo->prepare($sql);
+
+        foreach ($bind as $key => $value) {
+            $stmt->bindValue($key, $value, PDO::PARAM_STR);
+        }
+        $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $stmt->execute();
     }
-    $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
-    $stmt->execute();
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
