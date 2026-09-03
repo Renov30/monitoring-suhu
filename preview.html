@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang='id'>
+
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Monitoring Ruangan</title>
+
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: Arial, sans-serif;
+  background: #f2f2f2;
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+}
+
+.container {
+  max-width: 800px;
+  margin: auto;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.subtitle {
+  color: #777;
+  margin-bottom: 25px;
+}
+
+.status {
+  background: #ffffff;
+  padding: 15px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+}
+
+.status-online {
+  color: green;
+  font-weight: bold;
+}
+
+.status-offline {
+  color: red;
+  font-weight: bold;
+}
+
+.cards {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.card {
+  background: white;
+  width: 300px;
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.card h2 {
+  color: #555;
+}
+
+.value {
+  font-size: 50px;
+  font-weight: bold;
+  color: #222;
+}
+
+.unit {
+  font-size: 22px;
+  color: #777;
+}
+
+.footer {
+  margin-top: 25px;
+  font-size: 14px;
+  color: #888;
+}
+
+.panel {
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  margin-top: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  text-align: left;
+}
+
+.panel h2 {
+  color: #555;
+  text-align: center;
+  font-size: 20px;
+  margin-top: 0;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 300px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th, td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: center;
+}
+
+th {
+  background: #f7f7f7;
+  color: #555;
+}
+
+.hist-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.hist-nav button {
+  border: none;
+  background: #eef2f7;
+  color: #333;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.hist-nav button:hover:not(:disabled) {
+  background: #dbe4ef;
+}
+
+.hist-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#hist-label {
+  font-weight: bold;
+  color: #444;
+}
+
+.hist-nav input[type='date'] {
+  border: 1px solid #ccc;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+}
+</style>
+
+</head>
+
+<body>
+<div class='container'>
+
+<h1>Monitoring Ruangan</h1>
+<div class='subtitle'>wt32-ruang-a - WT32-ETH01 + DHT11</div>
+
+<div class='status' id='status-box'>
+<div class='status-online'>&#9679; Ethernet Connected</div>
+<div>IP: 192.168.2.24 (preview)</div>
+</div>
+
+<div class='cards'>
+
+<div class='card'>
+<h2>&#127777; Suhu</h2>
+<div class='value' id='temp-value'>--</div>
+</div>
+
+<div class='card'>
+<h2>&#128167; Kelembapan</h2>
+<div class='value' id='hum-value'>--</div>
+</div>
+
+</div>
+
+<div class='panel'>
+<h2>Grafik Riwayat</h2>
+<div class='chart-wrap'>
+<canvas id='chart'></canvas>
+</div>
+</div>
+
+<div class='panel'>
+<h2>Riwayat Data</h2>
+<div class='hist-nav'>
+<button onclick='prevDay()'>&#10094;</button>
+<input type='date' id='hist-date' onchange='onDatePick()'>
+<button onclick='nextDay()'>&#10095;</button>
+<span id='hist-label'>Memuat...</span>
+<button id='btn-today' onclick='goToday()'>Hari Ini</button>
+</div>
+<table>
+<thead>
+<tr><th>Waktu</th><th>Suhu (&deg;C)</th><th>Kelembapan (%)</th></tr>
+</thead>
+<tbody id='history-body'>
+<tr><td colspan='3'>Memuat...</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class='footer'>
+Data diperbarui otomatis setiap 30 detik (hanya jika tanggal aktif = hari ini)
+</div>
+
+</div>
+
+<script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js'></script>
+<script>
+
+var apiHost = 'http://192.168.2.250/api-monitoring-ruangan';
+var DEVICE_NAME = 'wt32-ruang-a';
+var selectedDate = todayStr();
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function dateLabel(ds) {
+  var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  var months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  var p = ds.split('-');
+  var d = new Date(p[0], p[1] - 1, p[2]);
+  return days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+function updateNav() {
+  document.getElementById('hist-date').value = selectedDate;
+  document.getElementById('hist-label').textContent = dateLabel(selectedDate);
+  document.getElementById('btn-today').disabled = (selectedDate === todayStr());
+}
+
+var chart = null;
+if (typeof Chart !== 'undefined') {
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels: [], datasets: [
+      { label: 'Suhu (\u00b0C)', data: [], borderColor: '#e74c3c',
+        backgroundColor: 'rgba(231,76,60,0.08)', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+      { label: 'Kelembapan (%)', data: [], borderColor: '#3498db',
+        backgroundColor: 'rgba(52,152,219,0.08)', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y1' }
+    ] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12 } },
+        y: { position: 'left', title: { display: true, text: '\u00b0C' } },
+        y1: { position: 'right', min: 0, max: 100, title: { display: true, text: '%' }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function renderRows(rows) {
+  if (chart) {
+    chart.data.labels = rows.map(function(d) { return d.recorded_at.substring(11, 16); });
+    chart.data.datasets[0].data = rows.map(function(d) { return parseFloat(d.temperature); });
+    chart.data.datasets[1].data = rows.map(function(d) { return parseFloat(d.humidity); });
+    chart.update('none');
+  }
+  var body = document.getElementById('history-body');
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="3">Belum ada data pada tanggal ini</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(function(d) {
+    return '<tr><td>' + d.recorded_at.substring(11) + '</td><td>'
+      + parseFloat(d.temperature).toFixed(1) + '</td><td>'
+      + parseFloat(d.humidity).toFixed(1) + '</td></tr>';
+  }).join('');
+}
+
+function loadHistory() {
+  updateNav();
+  fetch(apiHost + '/api.php?action=history&device=' + DEVICE_NAME + '&date=' + selectedDate)
+    .then(function(r) { return r.json(); })
+    .then(function(json) { if (json.ok) renderRows(json.data); })
+    .catch(function() {
+      document.getElementById('history-body').innerHTML =
+        '<tr><td colspan="3">Server database tidak dapat dihubungi</td></tr>';
+    });
+}
+
+function prevDay() {
+  var d = new Date(selectedDate + 'T00:00:00');
+  d.setDate(d.getDate() - 1);
+  selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  loadHistory();
+}
+
+function nextDay() {
+  var d = new Date(selectedDate + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  loadHistory();
+}
+
+function goToday() { selectedDate = todayStr(); loadHistory(); }
+
+function onDatePick() {
+  var v = document.getElementById('hist-date').value;
+  if (v) { selectedDate = v; loadHistory(); }
+}
+
+setInterval(function() { if (selectedDate === todayStr()) loadHistory(); }, 30000);
+
+loadHistory();
+
+</script>
+</body>
+</html>
