@@ -331,7 +331,7 @@ void handleRoot() {
 
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
 
-  html += "<title>Monitoring Ruangan</title>";
+  html += "<title>Monitoring Suhu Ruangan</title>";
 
 
   // =================================================
@@ -538,7 +538,7 @@ void handleRoot() {
   html += "<div class='container'>";
 
 
-  html += "<h1>Monitoring Ruangan</h1>";
+  html += "<h1>Monitoring Suhu Ruangan</h1>";
 
   html += "<div class='subtitle'>" + String(DEVICE_NAME) + " - WT32-ETH01 + DHT11</div>";
 
