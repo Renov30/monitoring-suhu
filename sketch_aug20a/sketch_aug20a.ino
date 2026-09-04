@@ -406,6 +406,9 @@ void handleRoot() {
   html += ".hist-nav button:disabled { opacity:0.4; cursor:default; }";
   html += ".hist-nav input[type='date'] { border:1px solid #e2e8f0; background:#f8fafc; padding:8px 12px; border-radius:10px; font-size:14px; color:#1e293b; font-family:inherit; }";
   html += "#hist-label { font-weight:700; color:#3730a3; background:#eef2ff; padding:8px 14px; border-radius:10px; font-size:14px; }";
+  html += ".range-nav { display:flex; gap:6px; }";
+  html += ".range-btn { border:1px solid #e2e8f0; background:#f8fafc; color:#1e293b; padding:7px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s ease; }";
+  html += ".range-btn.active { background:#187ca2; color:#fff; border-color:#187ca2; }";
   html += ".table-scroll { max-height:420px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; }";
   html += "table { width:100%; border-collapse:collapse; font-size:13.5px; }";
   html += "thead { position:sticky; top:0; background:#f8fafc; z-index:1; }";
@@ -473,6 +476,10 @@ void handleRoot() {
   html += "<div class='panel'>";
   html += "<div class='panel-header'>";
   html += "<h2>Grafik Riwayat Suhu &amp; Kelembapan</h2>";
+  html += "<div class='range-nav'>";
+  html += "<button id='btn-1h' class='range-btn active' onclick='setRange(1)'>&#127783; 1 Jam</button>";
+  html += "<button id='btn-24h' class='range-btn' onclick='setRange(24)'>&#128337; 24 Jam</button>";
+  html += "</div>";
   html += "</div>";
   html += "<div class='chart-wrap'>";
   html += "<canvas id='chart'></canvas>";
@@ -508,6 +515,7 @@ void handleRoot() {
   html += "var apiHost = '" + String(apiHost) + "';";
   html += "var DEVICE_NAME = '" + String(DEVICE_NAME) + "';";
   html += "var selectedDate = todayStr();";
+  html += "var rangeMode = 1;";
   html += "function pad(n) { return n < 10 ? '0' + n : '' + n; }";
   html += "function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }";
   html += "function dateLabel(ds) {";
@@ -560,12 +568,34 @@ void handleRoot() {
   html += "set('st-min-temp', minT, '&deg;C'); set('st-max-temp', maxT, '&deg;C'); set('st-avg-temp', avgT, '&deg;C'); set('st-avg-hum', avgH, '%');";
   html += "}";
 
+  html += "function filterChartRows(rows) {";
+  html += "if (rangeMode === 24) {";
+  html += "var byHour = {};";
+  html += "rows.forEach(function(d){ var h = d.recorded_at.substring(0, 13); if (!byHour[h]) { byHour[h] = { t: d.temperature, h: d.humidity, n: 1 }; } else { byHour[h].t += d.temperature; byHour[h].h += d.humidity; byHour[h].n++; } });";
+  html += "return Object.keys(byHour).map(function(k){ return { recorded_at: k + ':00', temperature: byHour[k].t / byHour[k].n, humidity: byHour[k].h / byHour[k].n }; });";
+  html += "}";
+  html += "var now = new Date();";
+  html += "var cutoff = new Date(now.getTime() - rangeMode * 60 * 60 * 1000);";
+  html += "var cutoffStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(cutoff.getHours()) + ':' + pad(cutoff.getMinutes()) + ':' + pad(cutoff.getSeconds());";
+  html += "return rows.filter(function(d){ return d.recorded_at >= cutoffStr; });";
+  html += "}";
+
+  html += "function setRange(mode) {";
+  html += "rangeMode = mode;";
+  html += "var a = document.getElementById('btn-1h'); var b = document.getElementById('btn-24h');";
+  html += "if (mode === 1) { a.className = 'range-btn active'; b.className = 'range-btn'; } else { a.className = 'range-btn'; b.className = 'range-btn active'; }";
+  html += "loadHistory();";
+  html += "}";
+
   html += "function renderRows(rows) {";
   html += "computeStats(rows);";
   html += "if (chart) {";
-  html += "chart.data.labels = rows.map(function(d){ return d.recorded_at.substring(11,16); });";
-  html += "chart.data.datasets[0].data = rows.map(function(d){ return parseFloat(d.temperature); });";
-  html += "chart.data.datasets[1].data = rows.map(function(d){ return parseFloat(d.humidity); });";
+  html += "var chartRows = filterChartRows(rows);";
+  html += "chart.data.labels = chartRows.map(function(d){ return d.recorded_at.substring(11,16); });";
+  html += "chart.data.datasets[0].data = chartRows.map(function(d){ return parseFloat(d.temperature); });";
+  html += "chart.data.datasets[1].data = chartRows.map(function(d){ return parseFloat(d.humidity); });";
+  html += "chart.data.datasets[0].label = rangeMode === 1 ? 'Suhu (\\u00b0C)' : 'Suhu (\\u00b0C, rata-rata/jam)';";
+  html += "chart.data.datasets[1].label = rangeMode === 1 ? 'Kelembapan (%)' : 'Kelembapan (%, rata-rata/jam)';";
   html += "chart.update('none');";
   html += "}";
   html += "var body = document.getElementById('history-body');";
