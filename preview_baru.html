@@ -4,6 +4,7 @@
 <head>
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<link rel='icon' type='image/png' href='img/tab_icon.png'>
 <title>Monitoring Suhu Ruangan</title>
 
 <style>
@@ -42,7 +43,7 @@ body {
   color: #fff;
   padding: 28px 20px;
   margin-bottom: 28px;
-  border-radius: 0 0 24px 24px;
+  border-radius: 0;
   box-shadow: var(--shadow);
 }
 
@@ -65,12 +66,16 @@ body {
 .brand-icon {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
+  overflow: hidden;
+}
+
+.brand-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .brand h1 {
@@ -400,7 +405,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div class='topbar'>
   <div class='topbar-inner'>
     <div class='brand'>
-      <div class='brand-icon'>&#127777;</div>
+      <div class='brand-icon'><img src='img/icon.png' alt='logo'></div>
       <div>
         <h1>Monitoring Suhu Ruangan</h1>
         <div class='device'>wt32-ruang-a &middot; WT32-ETH01 + DHT11</div>
