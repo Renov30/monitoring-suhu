@@ -316,54 +316,22 @@ void handleData() {
 
 
 // =====================================================
-// SERVE GAMBAR (PNG dari memori flash)
+// BACAPROGMEM STRING (untuk data URI base64 gambar)
 // =====================================================
-// Menggunakan chunked response agar aman terhadap byte
-// biner (0x00) yang tidak bisa dipotong via strlen.
-// sendContent() menulis sesuai panjang eksplisit String.
 
-void serveImage(const unsigned char* data, size_t len, const char* mime) {
+String progmemToString(const char* src, size_t len) {
 
-  server.sendHeader("Content-Type", mime);
+  String s;
 
-  server.sendHeader("Cache-Control", "max-age=86400");
+  s.reserve(len + 1);
 
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  for (size_t i = 0; i < len; i++) {
 
-  server.chunkedResponseModeStart();
+    s += (char)pgm_read_byte(&src[i]);
 
-  size_t chunkSize = 2048;
-
-  for (size_t i = 0; i < len; i += chunkSize) {
-
-    size_t n = min((size_t)chunkSize, len - i);
-
-    String chunk;
-
-    chunk.reserve(n);
-
-    for (size_t k = 0; k < n; k++) {
-
-      chunk += (char)pgm_read_byte(&data[i + k]);
-
-    }
-
-    server.sendContent(chunk);
   }
 
-  server.chunkedResponseFinalize();
-}
-
-
-void handleIcon() {
-
-  serveImage(img_icon_png, IMG_ICON_LEN, "image/png");
-}
-
-
-void handleTabIcon() {
-
-  serveImage(img_tab_icon_png, IMG_TAB_ICON_LEN, "image/png");
+  return s;
 }
 
 
@@ -374,7 +342,11 @@ void handleTabIcon() {
 void handleRoot() {
 
   String html = "";
-  html.reserve(14000);
+  html.reserve(30000);
+
+  String iconB64 = progmemToString(IMG_ICON_B64, IMG_ICON_B64_LEN);
+
+  String tabB64  = progmemToString(IMG_TAB_B64, IMG_TAB_B64_LEN);
 
   html += "<!DOCTYPE html>";
   html += "<html lang='id'>";
@@ -385,7 +357,7 @@ void handleRoot() {
 
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
 
-  html += "<link rel='icon' type='image/png' href='/tab_icon.png'>";
+  html += "<link rel='icon' type='image/png' href='data:image/png;base64," + tabB64 + "'>";
 
   html += "<title>Monitoring Suhu Ruangan</title>";
 
@@ -456,7 +428,7 @@ void handleRoot() {
   html += "<div class='topbar'>";
   html += "<div class='topbar-inner'>";
   html += "<div class='brand'>";
-  html += "<div class='brand-icon'><img src='/icon.png' alt='logo'></div>";
+  html += "<div class='brand-icon'><img src='data:image/png;base64," + iconB64 + "' alt='logo'></div>";
   html += "<div>";
   html += "<h1>Monitoring Suhu Ruangan</h1>";
   html += "<div class='device'>" + String(DEVICE_NAME) + " &middot; WT32-ETH01 + DHT11</div>";
@@ -743,10 +715,6 @@ void setup() {
   server.on("/", handleRoot);
 
   server.on("/data", handleData);
-
-  server.on("/icon.png", handleIcon);
-
-  server.on("/tab_icon.png", handleTabIcon);
 
   server.begin();
 
