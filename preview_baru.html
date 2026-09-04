@@ -438,7 +438,7 @@ tbody tr:last-child td { border-bottom: none; }
   <!-- Statistik -->
   <div class='panel' id='stats-panel'>
     <div class='panel-header'>
-      <h2>&#128200; Statistik Hari Ini</h2>
+      <h2>Statistik Hari Ini</h2>
       <span id='hist-label'>Memuat&hellip;</span>
     </div>
     <div class='stats-grid'>
@@ -468,7 +468,7 @@ tbody tr:last-child td { border-bottom: none; }
   <!-- Grafik -->
   <div class='panel'>
     <div class='panel-header'>
-      <h2>&#128202; Grafik Riwayat Suhu &amp; Kelembapan</h2>
+      <h2>Grafik Riwayat Suhu &amp; Kelembapan</h2>
     </div>
     <div class='chart-wrap'>
       <canvas id='chart'></canvas>
@@ -478,7 +478,7 @@ tbody tr:last-child td { border-bottom: none; }
   <!-- Tabel -->
   <div class='panel'>
     <div class='panel-header'>
-      <h2>&#128221; Riwayat Data</h2>
+      <h2>Riwayat Data</h2>
       <div class='hist-nav'>
         <button onclick='prevDay()'>&#10094;</button>
         <input type='date' id='hist-date' onchange='onDatePick()'>
@@ -529,8 +529,7 @@ function dateLabel(ds) {
 
 function updateNav() {
   var dl = document.getElementById('hist-label');
-  if (dl) dl.textContent = dateLabel(selectedDate) +
-    (selectedDate === todayStr() ? ' &middot; hari ini' : '');
+  if (dl) dl.textContent = dateLabel(selectedDate);
   var dd = document.getElementById('hist-date');
   if (dd) dd.value = selectedDate;
   var bt = document.getElementById('btn-today');
