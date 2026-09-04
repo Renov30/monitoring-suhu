@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "credentials.h"
+#include "images.h"
 
 // =====================================================
 // KONFIGURASI DHT11
@@ -315,12 +316,65 @@ void handleData() {
 
 
 // =====================================================
+// SERVE GAMBAR (PNG dari memori flash)
+// =====================================================
+// Menggunakan chunked response agar aman terhadap byte
+// biner (0x00) yang tidak bisa dipotong via strlen.
+// sendContent() menulis sesuai panjang eksplisit String.
+
+void serveImage(const unsigned char* data, size_t len, const char* mime) {
+
+  server.sendHeader("Content-Type", mime);
+
+  server.sendHeader("Cache-Control", "max-age=86400");
+
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+
+  server.chunkedResponseModeStart();
+
+  size_t chunkSize = 2048;
+
+  for (size_t i = 0; i < len; i += chunkSize) {
+
+    size_t n = min((size_t)chunkSize, len - i);
+
+    String chunk;
+
+    chunk.reserve(n);
+
+    for (size_t k = 0; k < n; k++) {
+
+      chunk += (char)pgm_read_byte(&data[i + k]);
+
+    }
+
+    server.sendContent(chunk);
+  }
+
+  server.chunkedResponseFinalize();
+}
+
+
+void handleIcon() {
+
+  serveImage(img_icon_png, IMG_ICON_LEN, "image/png");
+}
+
+
+void handleTabIcon() {
+
+  serveImage(img_tab_icon_png, IMG_TAB_ICON_LEN, "image/png");
+}
+
+
+// =====================================================
 // HALAMAN WEB
 // =====================================================
 
 void handleRoot() {
 
   String html = "";
+  html.reserve(14000);
 
   html += "<!DOCTYPE html>";
   html += "<html lang='id'>";
@@ -331,623 +385,259 @@ void handleRoot() {
 
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
 
+  html += "<link rel='icon' type='image/png' href='/tab_icon.png'>";
+
   html += "<title>Monitoring Suhu Ruangan</title>";
 
-
-  // =================================================
-  // CSS
-  // =================================================
-
   html += "<style>";
-
-  html += "* { box-sizing: border-box; }";
-
-  html += "body {";
-  html += "font-family: Arial, sans-serif;";
-  html += "background: #f2f2f2;";
-  html += "margin: 0;";
-  html += "padding: 20px;";
-  html += "text-align: center;";
-  html += "}";
-
-
-  html += ".container {";
-  html += "max-width: 800px;";
-  html += "margin: auto;";
-  html += "}";
-
-
-  html += "h1 {";
-  html += "color: #333;";
-  html += "margin-bottom: 5px;";
-  html += "}";
-
-
-  html += ".subtitle {";
-  html += "color: #777;";
-  html += "margin-bottom: 25px;";
-  html += "}";
-
-
-  html += ".status {";
-  html += "background: #ffffff;";
-  html += "padding: 15px;";
-  html += "border-radius: 12px;";
-  html += "margin-bottom: 20px;";
-  html += "box-shadow: 0 3px 10px rgba(0,0,0,0.08);";
-  html += "}";
-
-
-  html += ".status-online {";
-  html += "color: green;";
-  html += "font-weight: bold;";
-  html += "}";
-
-
-  html += ".status-offline {";
-  html += "color: red;";
-  html += "font-weight: bold;";
-  html += "}";
-
-
-  html += ".cards {";
-  html += "display: flex;";
-  html += "gap: 20px;";
-  html += "justify-content: center;";
-  html += "flex-wrap: wrap;";
-  html += "}";
-
-
-  html += ".card {";
-  html += "background: white;";
-  html += "width: 300px;";
-  html += "padding: 30px;";
-  html += "border-radius: 15px;";
-  html += "box-shadow: 0 4px 12px rgba(0,0,0,0.1);";
-  html += "}";
-
-
-  html += ".card h2 {";
-  html += "color: #555;";
-  html += "}";
-
-
-  html += ".value {";
-  html += "font-size: 50px;";
-  html += "font-weight: bold;";
-  html += "color: #222;";
-  html += "}";
-
-
-  html += ".unit {";
-  html += "font-size: 22px;";
-  html += "color: #777;";
-  html += "}";
-
-
-  html += ".footer {";
-  html += "margin-top: 25px;";
-  html += "font-size: 14px;";
-  html += "color: #888;";
-  html += "}";
-
-
-  html += ".panel {";
-  html += "background: white;";
-  html += "padding: 25px;";
-  html += "border-radius: 15px;";
-  html += "margin-top: 20px;";
-  html += "box-shadow: 0 4px 12px rgba(0,0,0,0.1);";
-  html += "text-align: left;";
-  html += "}";
-
-
-  html += ".panel h2 {";
-  html += "color: #555;";
-  html += "text-align: center;";
-  html += "font-size: 20px;";
-  html += "margin-top: 0;";
-  html += "}";
-
-
-  html += ".chart-wrap {";
-  html += "position: relative;";
-  html += "height: 300px;";
-  html += "}";
-
-
-  html += "table {";
-  html += "width: 100%;";
-  html += "border-collapse: collapse;";
-  html += "font-size: 14px;";
-  html += "}";
-
-
-  html += "th, td {";
-  html += "padding: 8px 10px;";
-  html += "border-bottom: 1px solid #eee;";
-  html += "text-align: center;";
-  html += "}";
-
-
-  html += "th {";
-  html += "background: #f7f7f7;";
-  html += "color: #555;";
-  html += "}";
-
-
-  html += ".hist-nav {";
-  html += "display: flex;";
-  html += "justify-content: center;";
-  html += "align-items: center;";
-  html += "gap: 10px;";
-  html += "margin-bottom: 15px;";
-  html += "flex-wrap: wrap;";
-  html += "}";
-
-
-  html += ".hist-nav button {";
-  html += "border: none;";
-  html += "background: #eef2f7;";
-  html += "color: #333;";
-  html += "padding: 8px 14px;";
-  html += "border-radius: 8px;";
-  html += "font-size: 14px;";
-  html += "font-weight: bold;";
-  html += "cursor: pointer;";
-  html += "}";
-
-
-  html += ".hist-nav button:hover:not(:disabled) {";
-  html += "background: #dbe4ef;";
-  html += "}";
-
-
-  html += ".hist-nav button:disabled {";
-  html += "opacity: 0.4;";
-  html += "cursor: default;";
-  html += "}";
-
-
-  html += "#hist-label {";
-  html += "font-weight: bold;";
-  html += "color: #444;";
-  html += "}";
-
-
-  html += ".hist-nav input[type='date'] {";
-  html += "border: 1px solid #ccc;";
-  html += "padding: 7px 10px;";
-  html += "border-radius: 8px;";
-  html += "font-size: 14px;";
-  html += "color: #333;";
-  html += "}";
-
-
+  html += "* { box-sizing: border-box; margin: 0; padding: 0; }";
+  html += "body { font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif; background:#f1f5f9; color:#1e293b; min-height:100vh; padding:0 0 40px; }";
+  html += ".container { max-width:1000px; margin:0 auto; padding:0 20px; }";
+  html += ".topbar { background:#187ca2; color:#fff; padding:28px 20px; margin-bottom:28px; border-radius:0; box-shadow:0 10px 25px -5px rgba(15,23,42,0.08); }";
+  html += ".topbar-inner { max-width:1000px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; }";
+  html += ".brand { display:flex; align-items:center; gap:14px; }";
+  html += ".brand-icon { width:48px; height:48px; display:flex; align-items:center; justify-content:center; overflow:hidden; }";
+  html += ".brand-icon img { width:100%; height:100%; object-fit:cover; }";
+  html += ".brand h1 { font-size:22px; font-weight:700; }";
+  html += ".brand .device { font-size:13px; opacity:0.85; }";
+  html += ".status-pill { display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,0.16); padding:9px 16px; border-radius:999px; font-weight:600; font-size:13.5px; }";
+  html += ".status-dot { width:9px; height:9px; border-radius:50%; background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,0.35); animation:pulse 1.6s infinite; }";
+  html += ".status-dot.offline { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,0.35); animation:none; }";
+  html += "@keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.25); } }";
+  html += ".ip-text { font-size:12px; opacity:0.8; font-weight:400; }";
+  html += ".live-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:20px; margin-bottom:28px; }";
+  html += ".live-card { background:#fff; border-radius:18px; padding:24px; box-shadow:0 10px 25px -5px rgba(15,23,42,0.08); border:1px solid #e2e8f0; position:relative; overflow:hidden; }";
+  html += ".live-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:5px; }";
+  html += ".live-card.temp::before { background:#ef4444; }";
+  html += ".live-card.hum::before { background:#2563eb; }";
+  html += ".live-card .label { display:flex; align-items:center; gap:8px; color:#64748b; font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }";
+  html += ".live-card .label .ico { font-size:18px; }";
+  html += ".live-value { font-size:46px; font-weight:800; color:#1e293b; line-height:1.2; margin-top:8px; }";
+  html += ".live-value .unit { font-size:20px; font-weight:600; color:#64748b; margin-left:3px; }";
+  html += ".live-card .caption { margin-top:6px; font-size:12px; color:#64748b; }";
+  html += ".stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; }";
+  html += ".stat-card { background:#fff; border-radius:16px; padding:16px 20px; box-shadow:0 10px 25px -5px rgba(15,23,42,0.08); border:1px solid #e2e8f0; }";
+  html += ".stat-card .stat-title { font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:0.4px; font-weight:600; }";
+  html += ".stat-card .stat-num { font-size:24px; font-weight:800; margin-top:6px; color:#1e293b; }";
+  html += ".stat-card .stat-num small { font-size:13px; font-weight:600; color:#64748b; }";
+  html += ".stat-card .stat-badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; margin-bottom:4px; }";
+  html += ".badge-min { background:#e0f2fe; color:#0369a1; }";
+  html += ".badge-max { background:#fee2e2; color:#b91c1c; }";
+  html += ".badge-avg { background:#dcfce7; color:#15803d; }";
+  html += ".panel { background:#fff; border-radius:18px; padding:24px; margin-bottom:24px; box-shadow:0 10px 25px -5px rgba(15,23,42,0.08); border:1px solid #e2e8f0; }";
+  html += ".panel-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px; }";
+  html += ".panel-header h2 { font-size:16px; font-weight:700; color:#1e293b; }";
+  html += ".chart-wrap { position:relative; height:320px; }";
+  html += ".hist-nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }";
+  html += ".hist-nav button { border:1px solid #e2e8f0; background:#f8fafc; color:#1e293b; padding:8px 13px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; transition:all 0.15s ease; line-height:1; }";
+  html += ".hist-nav button:hover:not(:disabled) { background:#187ca2; color:#fff; border-color:#187ca2; }";
+  html += ".hist-nav button:disabled { opacity:0.4; cursor:default; }";
+  html += ".hist-nav input[type='date'] { border:1px solid #e2e8f0; background:#f8fafc; padding:8px 12px; border-radius:10px; font-size:14px; color:#1e293b; font-family:inherit; }";
+  html += "#hist-label { font-weight:700; color:#3730a3; background:#eef2ff; padding:8px 14px; border-radius:10px; font-size:14px; }";
+  html += ".table-scroll { max-height:420px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:12px; }";
+  html += "table { width:100%; border-collapse:collapse; font-size:13.5px; }";
+  html += "thead { position:sticky; top:0; background:#f8fafc; z-index:1; }";
+  html += "th, td { padding:11px 14px; text-align:center; border-bottom:1px solid #e2e8f0; }";
+  html += "th { color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.4px; font-size:12px; }";
+  html += "tbody tr:hover { background:#f8fafc; }";
+  html += "tbody tr:last-child td { border-bottom:none; }";
+  html += ".temp-badge, .hum-badge { display:inline-block; min-width:64px; padding:3px 10px; border-radius:999px; font-weight:600; font-size:13px; }";
+  html += ".temp-badge { background:#fee2e2; color:#b91c1c; }";
+  html += ".hum-badge { background:#dbeafe; color:#1d4ed8; }";
+  html += ".time-cell { font-variant-numeric:tabular-nums; color:#1e293b; font-weight:600; }";
+  html += ".footer { text-align:center; font-size:12.5px; color:#64748b; margin-top:10px; }";
+  html += ".empty-row { padding:24px; color:#64748b !important; background:#f8fafc; }";
   html += "</style>";
 
   html += "</head>";
 
-
-  // =================================================
-  // BODY
-  // =================================================
-
   html += "<body>";
+
+  html += "<div class='topbar'>";
+  html += "<div class='topbar-inner'>";
+  html += "<div class='brand'>";
+  html += "<div class='brand-icon'><img src='/icon.png' alt='logo'></div>";
+  html += "<div>";
+  html += "<h1>Monitoring Suhu Ruangan</h1>";
+  html += "<div class='device'>" + String(DEVICE_NAME) + " &middot; WT32-ETH01 + DHT11</div>";
+  html += "</div>";
+  html += "</div>";
+  html += "<div class='status-pill' id='status-pill'>";
+  html += "<span class='status-dot' id='status-dot'></span>";
+  html += "<span id='status-text'>Menyambung&hellip;</span>";
+  html += "<span class='ip-text' id='ip-text'></span>";
+  html += "</div>";
+  html += "</div>";
+  html += "</div>";
 
   html += "<div class='container'>";
 
-
-  html += "<h1>Monitoring Suhu Ruangan</h1>";
-
-  html += "<div class='subtitle'>" + String(DEVICE_NAME) + " - WT32-ETH01 + DHT11</div>";
-
-
-  // =================================================
-  // STATUS ETHERNET
-  // =================================================
-
-  html += "<div class='status' id='status-box'>";
-
-  if (eth_connected) {
-
-    html += "<div class='status-online'>";
-    html += "● Ethernet Connected";
-    html += "</div>";
-
-    html += "<div>";
-    html += "IP: ";
-    html += ETH.localIP().toString();
-    html += "</div>";
-
-  } else {
-
-    html += "<div class='status-offline'>";
-    html += "● Ethernet Disconnected";
-    html += "</div>";
-
-  }
-
+  html += "<div class='live-grid'>";
+  html += "<div class='live-card temp'>";
+  html += "<div class='label'><span class='ico'>&#127777;</span> Suhu</div>";
+  html += "<div class='live-value' id='temp-value'>--<span class='unit'>&deg;C</span></div>";
+  html += "<div class='caption'>Pembacaan realtime</div>";
   html += "</div>";
-
-
-  // =================================================
-  // SENSOR CARDS
-  // =================================================
-
-  html += "<div class='cards'>";
-
-
-  // -------------------------------------------------
-  // SUHU
-  // -------------------------------------------------
-
-  html += "<div class='card'>";
-
-  html += "<h2>🌡 Suhu</h2>";
-
-  if (isnan(temperature)) {
-
-    html += "<div class='value' id='temp-value'>--</div>";
-
-  } else {
-
-    html += "<div class='value' id='temp-value'>";
-
-    html += String(temperature, 1);
-
-    html += " <span class='unit'>°C</span>";
-
-    html += "</div>";
-
-  }
-
+  html += "<div class='live-card hum'>";
+  html += "<div class='label'><span class='ico'>&#128167;</span> Kelembapan</div>";
+  html += "<div class='live-value' id='hum-value'>--<span class='unit'>%</span></div>";
+  html += "<div class='caption'>Pembacaan realtime</div>";
   html += "</div>";
-
-
-  // -------------------------------------------------
-  // KELEMBAPAN
-  // -------------------------------------------------
-
-  html += "<div class='card'>";
-
-  html += "<h2>💧 Kelembapan</h2>";
-
-  if (isnan(humidity)) {
-
-    html += "<div class='value' id='hum-value'>--</div>";
-
-  } else {
-
-    html += "<div class='value' id='hum-value'>";
-
-    html += String(humidity, 1);
-
-    html += " <span class='unit'>%</span>";
-
-    html += "</div>";
-
-  }
-
   html += "</div>";
-
-
-  html += "</div>";
-
-
-  // =================================================
-  // GRAFIK RIWAYAT
-  // =================================================
 
   html += "<div class='panel'>";
+  html += "<div class='panel-header'>";
+  html += "<h2>Statistik Hari Ini</h2>";
+  html += "<span id='hist-label'>Memuat&hellip;</span>";
+  html += "</div>";
+  html += "<div class='stats-grid'>";
+  html += "<div class='stat-card'><span class='stat-badge badge-min'>RENDAH</span><div class='stat-title'>Suhu</div><div class='stat-num' id='st-min-temp'>--<small>&deg;C</small></div></div>";
+  html += "<div class='stat-card'><span class='stat-badge badge-max'>TERTINGGI</span><div class='stat-title'>Suhu</div><div class='stat-num' id='st-max-temp'>--<small>&deg;C</small></div></div>";
+  html += "<div class='stat-card'><span class='stat-badge badge-avg'>RATA-RATA</span><div class='stat-title'>Suhu</div><div class='stat-num' id='st-avg-temp'>--<small>&deg;C</small></div></div>";
+  html += "<div class='stat-card'><span class='stat-badge badge-avg'>RATA-RATA</span><div class='stat-title'>Kelembapan</div><div class='stat-num' id='st-avg-hum'>--<small>%</small></div></div>";
+  html += "</div>";
+  html += "</div>";
 
-  html += "<h2>Grafik Riwayat</h2>";
-
+  html += "<div class='panel'>";
+  html += "<div class='panel-header'>";
+  html += "<h2>Grafik Riwayat Suhu &amp; Kelembapan</h2>";
+  html += "</div>";
   html += "<div class='chart-wrap'>";
-
   html += "<canvas id='chart'></canvas>";
-
   html += "</div>";
-
   html += "</div>";
-
-
-  // =================================================
-  // TABEL RIWAYAT
-  // =================================================
 
   html += "<div class='panel'>";
-
+  html += "<div class='panel-header'>";
   html += "<h2>Riwayat Data</h2>";
-
   html += "<div class='hist-nav'>";
-
   html += "<button onclick='prevDay()'>&#10094;</button>";
-
   html += "<input type='date' id='hist-date' onchange='onDatePick()'>";
-
   html += "<button onclick='nextDay()'>&#10095;</button>";
-
-  html += "<span id='hist-label'>Memuat...</span>";
-
   html += "<button id='btn-today' onclick='goToday()'>Hari Ini</button>";
-
   html += "</div>";
-
+  html += "</div>";
+  html += "<div class='table-scroll'>";
   html += "<table>";
-
-  html += "<thead>";
-
-  html += "<tr><th>Waktu</th><th>Suhu (°C)</th><th>Kelembapan (%)</th></tr>";
-
-  html += "</thead>";
-
-  html += "<tbody id='history-body'>";
-
-  html += "<tr><td colspan='3'>Memuat...</td></tr>";
-
-  html += "</tbody>";
-
+  html += "<thead><tr><th>Waktu</th><th>Suhu</th><th>Kelembapan</th></tr></thead>";
+  html += "<tbody id='history-body'><tr><td colspan='3' class='empty-row'>Memuat&hellip;</td></tr></tbody>";
   html += "</table>";
-
+  html += "</div>";
   html += "</div>";
 
-
-  // =================================================
-  // FOOTER
-  // =================================================
-
-  html += "<div class='footer'>";
-
-  html += "Data diperbarui setiap 2 detik";
+  html += "<div class='footer'>Data diperbarui otomatis setiap 30 detik (hanya jika tanggal aktif = hari ini)</div>";
 
   html += "</div>";
-
-
-  html += "</div>";
-
-
-  // =================================================
-  // JAVASCRIPT (CHART.JS + RIWAYAT)
-  // =================================================
 
   html += "<script src='" + String(apiHost) + "/chart.umd.min.js'></script>";
 
   html += "<script>";
 
-  html += "var chart = null;";
-
-  html += "if (typeof Chart !== 'undefined') {";
-
-  html += "chart = new Chart(document.getElementById('chart'), {";
-
-  html += "type: 'line',";
-
-  html += "data: { labels: [], datasets: [";
-
-  html += "{ label: 'Suhu (°C)', data: [], borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,0.08)', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y' },";
-
-  html += "{ label: 'Kelembapan (%)', data: [], borderColor: '#3498db', backgroundColor: 'rgba(52,152,219,0.08)', fill: true, tension: 0.3, pointRadius: 2, yAxisID: 'y1' }";
-
-  html += "] },";
-
-  html += "options: {";
-
-  html += "responsive: true,";
-
-  html += "maintainAspectRatio: false,";
-
-  html += "interaction: { mode: 'index', intersect: false },";
-
-  html += "scales: {";
-
-  html += "x: { ticks: { maxTicksLimit: 10 } },";
-
-  html += "y: { position: 'left', title: { display: true, text: '°C' } },";
-
-  html += "y1: { position: 'right', min: 0, max: 100, title: { display: true, text: '%' }, grid: { drawOnChartArea: false } }";
-
-  html += "}";
-
-  html += "}";
-
-  html += "});";
-
-  html += "}";
-
-
+  html += "var apiHost = '" + String(apiHost) + "';";
+  html += "var DEVICE_NAME = '" + String(DEVICE_NAME) + "';";
   html += "var selectedDate = todayStr();";
-
-  html += "";
-
   html += "function pad(n) { return n < 10 ? '0' + n : '' + n; }";
-
   html += "function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }";
-
   html += "function dateLabel(ds) {";
-
-  html += "var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];";
-
-  html += "var months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];";
-
+  html += "var days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];";
+  html += "var months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];";
   html += "var p = ds.split('-'); var d = new Date(p[0], p[1] - 1, p[2]);";
-
   html += "return days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();";
-
   html += "}";
-
-  html += "";
-
   html += "function updateNav() {";
-
-  html += "document.getElementById('hist-date').value = selectedDate;";
-
-  html += "document.getElementById('hist-label').textContent = dateLabel(selectedDate);";
-
-  html += "document.getElementById('btn-today').disabled = (selectedDate === todayStr());";
-
+  html += "var dl = document.getElementById('hist-label'); if (dl) dl.textContent = dateLabel(selectedDate);";
+  html += "var dd = document.getElementById('hist-date'); if (dd) dd.value = selectedDate;";
+  html += "var bt = document.getElementById('btn-today'); if (bt) bt.disabled = (selectedDate === todayStr());";
   html += "}";
 
-  html += "";
+  html += "var chart = null;";
+  html += "if (typeof Chart !== 'undefined') {";
+  html += "Chart.defaults.font.family = 'Segoe UI, system-ui, sans-serif';";
+  html += "Chart.defaults.color = '#64748b';";
+  html += "chart = new Chart(document.getElementById('chart'), {";
+  html += "type: 'line',";
+  html += "data: { labels: [], datasets: [";
+  html += "{ label: 'Suhu (\\u00b0C)', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: '#ef4444', borderWidth: 2, yAxisID: 'y' },";
+  html += "{ label: 'Kelembapan (%)', data: [], borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.08)', fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: '#2563eb', borderWidth: 2, yAxisID: 'y1' }";
+  html += "] },";
+  html += "options: {";
+  html += "responsive: true, maintainAspectRatio: false,";
+  html += "interaction: { mode: 'index', intersect: false },";
+  html += "plugins: {";
+  html += "tooltip: { mode: 'index', intersect: false, backgroundColor: '#1e293b', titleColor: '#fff', bodyColor: '#e2e8f0', padding: 10, cornerRadius: 10 },";
+  html += "legend: { position: 'top', labels: { usePointStyle: true, padding: 18 } }";
+  html += "},";
+  html += "scales: {";
+  html += "x: { grid: { display: false }, ticks: { maxTicksLimit: 12, maxRotation: 0 } },";
+  html += "y: { position: 'left', title: { display: true, text: 'Suhu (\\u00b0C)' }, grid: { color: '#f1f5f9' } },";
+  html += "y1: { position: 'right', min: 0, max: 100, title: { display: true, text: 'Kelembapan (%)' }, grid: { drawOnChartArea: false } }";
+  html += "}";
+  html += "}";
+  html += "});";
+  html += "}";
+
+  html += "function computeStats(rows) {";
+  html += "if (!rows.length) { ['st-min-temp','st-max-temp','st-avg-temp','st-avg-hum'].forEach(function(id){ var el = document.getElementById(id); if (el) el.innerHTML = '--'; }); return; }";
+  html += "var temps = rows.map(function(d){ return parseFloat(d.temperature); });";
+  html += "var hums = rows.map(function(d){ return parseFloat(d.humidity); });";
+  html += "var minT = Math.min.apply(null, temps);";
+  html += "var maxT = Math.max.apply(null, temps);";
+  html += "var avgT = temps.reduce(function(a,b){ return a+b; },0) / temps.length;";
+  html += "var avgH = hums.reduce(function(a,b){ return a+b; },0) / hums.length;";
+  html += "function set(id, v, unit) { var el = document.getElementById(id); if (el) el.innerHTML = v.toFixed(1) + '<small>' + unit + '</small>'; }";
+  html += "set('st-min-temp', minT, '&deg;C'); set('st-max-temp', maxT, '&deg;C'); set('st-avg-temp', avgT, '&deg;C'); set('st-avg-hum', avgH, '%');";
+  html += "}";
 
   html += "function renderRows(rows) {";
-
+  html += "computeStats(rows);";
   html += "if (chart) {";
-
-  html += "chart.data.labels = rows.map(function(d) { return d.recorded_at.substring(11, 16); });";
-
-  html += "chart.data.datasets[0].data = rows.map(function(d) { return parseFloat(d.temperature); });";
-
-  html += "chart.data.datasets[1].data = rows.map(function(d) { return parseFloat(d.humidity); });";
-
+  html += "chart.data.labels = rows.map(function(d){ return d.recorded_at.substring(11,16); });";
+  html += "chart.data.datasets[0].data = rows.map(function(d){ return parseFloat(d.temperature); });";
+  html += "chart.data.datasets[1].data = rows.map(function(d){ return parseFloat(d.humidity); });";
   html += "chart.update('none');";
-
   html += "}";
-
   html += "var body = document.getElementById('history-body');";
-
-  html += "if (rows.length === 0) { body.innerHTML = '<tr><td colspan=\"3\">Belum ada data pada tanggal ini</td></tr>'; return; }";
-
-  html += "body.innerHTML = rows.map(function(d) {";
-
-  html += "return '<tr><td>' + d.recorded_at.substring(11) + '</td><td>' + parseFloat(d.temperature).toFixed(1) + '</td><td>' + parseFloat(d.humidity).toFixed(1) + '</td></tr>';";
-
-  html += "}).join('');";
-
+  html += "if (rows.length === 0) { body.innerHTML = '<tr><td colspan=\"3\" class=\"empty-row\">Belum ada data pada tanggal ini</td></tr>'; return; }";
+  html += "body.innerHTML = rows.map(function(d){ return '<tr><td class=\"time-cell\">' + d.recorded_at.substring(11) + '</td><td><span class=\"temp-badge\">' + parseFloat(d.temperature).toFixed(1) + ' &deg;C</span></td><td><span class=\"hum-badge\">' + parseFloat(d.humidity).toFixed(1) + ' %</span></td></tr>'; }).join('');";
   html += "}";
-
-  html += "";
 
   html += "function loadHistory() {";
-
   html += "updateNav();";
-
-  html += "fetch('" + String(apiHost) + "/api.php?action=history&device=" + String(DEVICE_NAME) + "&date=' + selectedDate)";
-
-  html += ".then(function(r) { return r.json(); })";
-
-  html += ".then(function(json) {";
-
-  html += "if (!json.ok) { return; }";
-
-  html += "renderRows(json.data);";
-
-  html += "})";
-
-  html += ".catch(function() {";
-
-  html += "document.getElementById('history-body').innerHTML = '<tr><td colspan=\"3\">Server database tidak dapat dihubungi</td></tr>';";
-
-  html += "});";
-
+  html += "fetch(apiHost + '/api.php?action=history&device=' + DEVICE_NAME + '&date=' + selectedDate)";
+  html += ".then(function(r){ return r.json(); })";
+  html += ".then(function(json){ if (json.ok) renderRows(json.data || []); })";
+  html += ".catch(function(){ document.getElementById('history-body').innerHTML = '<tr><td colspan=\"3\" class=\"empty-row\">Server database tidak dapat dihubungi</td></tr>'; });";
   html += "}";
 
-  html += "";
+  html += "function prevDay() { var d = new Date(selectedDate + 'T00:00:00'); d.setDate(d.getDate() - 1); selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); loadHistory(); }";
+  html += "function nextDay() { var d = new Date(selectedDate + 'T00:00:00'); d.setDate(d.getDate() + 1); selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); loadHistory(); }";
+  html += "function goToday() { selectedDate = todayStr(); loadHistory(); }";
+  html += "function onDatePick() { var v = document.getElementById('hist-date').value; if (v) { selectedDate = v; loadHistory(); } }";
 
-  html += "function prevDay() {";
-
-  html += "var d = new Date(selectedDate + 'T00:00:00');";
-
-  html += "d.setDate(d.getDate() - 1);";
-
-  html += "selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());";
-
+  html += "setInterval(function(){ if (selectedDate === todayStr()) loadHistory(); }, 30000);";
   html += "loadHistory();";
-
-  html += "}";
-
-  html += "";
-
-  html += "function nextDay() {";
-
-  html += "var d = new Date(selectedDate + 'T00:00:00');";
-
-  html += "d.setDate(d.getDate() + 1);";
-
-  html += "selectedDate = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());";
-
-  html += "loadHistory();";
-
-  html += "}";
-
-  html += "";
-
-  html += "function goToday() {";
-
-  html += "selectedDate = todayStr();";
-
-  html += "loadHistory();";
-
-  html += "}";
-
-  html += "";
-
-  html += "function onDatePick() {";
-
-  html += "var v = document.getElementById('hist-date').value;";
-
-  html += "if (v) { selectedDate = v; loadHistory(); }";
-
-  html += "}";
-
-  html += "";
-
-  html += "setInterval(function() { if (selectedDate === todayStr()) loadHistory(); }, 30000);";
-
-  html += "";
-
-  html += "loadHistory();";
-
 
   html += "function updateRealtime() {";
-
-  html += "fetch('/data')";
-
-  html += ".then(function(r) { return r.json(); })";
-
-  html += ".then(function(d) {";
-
-  html += "var st = document.getElementById('status-box');";
-
-  html += "if (d.eth_connected) {";
-
-  html += "st.innerHTML = '<div class=\"status-online\">● Ethernet Connected</div><div>IP: ' + d.ip + '</div>';";
-
-  html += "} else {";
-
-  html += "st.innerHTML = '<div class=\"status-offline\">● Ethernet Disconnected</div>';";
-
+  html += "fetch('/data').then(function(r){ return r.json(); }).then(function(d){";
+  html += "var pill = document.getElementById('status-pill');";
+  html += "var dot = document.getElementById('status-dot');";
+  html += "var txt = document.getElementById('status-text');";
+  html += "var ip = document.getElementById('ip-text');";
+  html += "if (d.eth_connected) { dot.className = 'status-dot'; txt.textContent = 'Online'; ip.textContent = d.ip; }";
+  html += "else { dot.className = 'status-dot offline'; txt.textContent = 'Offline'; ip.textContent = ''; }";
+  html += "if (d.temperature !== null) document.getElementById('temp-value').innerHTML = d.temperature.toFixed(1) + '<span class=\"unit\">&deg;C</span>';";
+  html += "if (d.humidity !== null) document.getElementById('hum-value').innerHTML = d.humidity.toFixed(1) + '<span class=\"unit\">%</span>';";
+  html += "}).catch(function(){});";
   html += "}";
-
-  html += "document.getElementById('temp-value').innerHTML = d.temperature === null ? '--' : d.temperature.toFixed(1) + ' <span class=\"unit\">°C</span>';";
-
-  html += "document.getElementById('hum-value').innerHTML = d.humidity === null ? '--' : d.humidity.toFixed(1) + ' <span class=\"unit\">%</span>';";
-
-  html += "})";
-
-  html += ".catch(function() {});";
-
-  html += "}";
-
   html += "setInterval(updateRealtime, 2000);";
-
   html += "updateRealtime();";
 
   html += "</script>";
-
   html += "</body>";
-
   html += "</html>";
-
 
   server.send(200, "text/html", html);
 }
-
-
-// =====================================================
-// SETUP
-// =====================================================
-
 void setup() {
 
   // =================================================
@@ -1054,6 +744,10 @@ void setup() {
 
   server.on("/data", handleData);
 
+  server.on("/icon.png", handleIcon);
+
+  server.on("/tab_icon.png", handleTabIcon);
+
   server.begin();
 
   Serial.println("[WEB] Web Server Started");
@@ -1120,7 +814,7 @@ void loop() {
 
       Serial.print("  Suhu       : ");
       Serial.print(temperature, 1);
-      Serial.println(" °C");
+      Serial.println(" C");
 
       Serial.print("  Kelembapan : ");
       Serial.print(humidity, 1);
